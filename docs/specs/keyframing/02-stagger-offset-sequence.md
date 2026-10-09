@@ -47,7 +47,7 @@ export interface StaggerParamsV1 {
 export interface StaggerItemV1 { readonly id: string; readonly keys: readonly string[]; readonly start: ExactTime; readonly end: ExactTime; readonly place: { readonly x: number; readonly y: number } | null }
 export const staggerItemsV1 = (doc: DocumentV1, sel: KeySelectionV1, items: StaggerItemsV1, order: StaggerOrderV1, playhead: ExactTime): readonly StaggerItemV1[]
 export const staggerMovesV1 = (p: StaggerParamsV1, ordered: readonly StaggerItemV1[], fps: number): readonly number[]
-export const applyStaggerV1 = (doc: DocumentV1, ordered: readonly StaggerItemV1[], moves: readonly number[], p: StaggerParamsV1): { readonly document: DocumentV1; readonly replaced: number; readonly written: number }
+export const applyStaggerV1 = (doc: DocumentV1, ordered: readonly StaggerItemV1[], moves: readonly number[], p: StaggerParamsV1): EditResultV1 & { readonly written: number }   // spec 06; replaced keys are its `removed`
 export const staggerRandomV1 = (seed: number, salt: number, index: number): number            // [0, 1)
 
 // Time Offset (Ruling 12)
@@ -57,7 +57,7 @@ export const convertTimeOffsetToKeysV1 = <V>(track: TrackV1<V>, fps: number): Tr
 export const effectiveLayerOffsetV1 = (doc: DocumentV1, nodeId: string): number          // sum up the parent chain
 ```
 
-`timeOffset` is a new optional integer on the node (`VERIFY:` the node type and its parent link), default 0; `place` is the item's composition place at the playhead (`VERIFY:` `compositionPlaceV1`). `staggerRandomV1` is mulberry32 seeded with `(seed ^ salt × 0x9e3779b9 ^ index) >>> 0`: five lines, public domain, no dependency (`VERIFY:` share it with spec 05's Wiggle). Salt 1 orders, salt 2 jitters, so one never changes the other.
+`timeOffset` is a new optional integer on the node (`VERIFY:` the node type and its parent link), default 0; `place` is the item's composition place at the playhead (`VERIFY:` `compositionPlaceV1`). `staggerRandomV1` is mulberry32 seeded with `(seed ^ salt × 0x9e3779b9 ^ index) >>> 0`: five lines, public domain (`VERIFY:` share it with spec 05's Wiggle). Salt 1 orders, salt 2 jitters, so one never changes the other.
 
 **The moves.** n ordered items; n = 1 is refused. Interval: `T` = per item × (n − 1) or the typed total; `ideal_i = D(i / (n − 1)) × T`. Overlap: `c_i = Σ_{j<i} (len_j − overlap)`, `len_j` the item's first-to-last key span in frames; `ideal_i = D(c_i / c_{n−1}) × c_{n−1}` (Interval with per item = len − overlap when lengths are equal). Sequence: `start'_0 = start_0`, `start'_i = start'_{i−1} + len_{i−1} − overlap`, `ideal_i = start'_i − start_i`; a negative overlap is a gap. `D(u)` is `u`, `u^p`, `1 − (1 − u)^p`, those two joined at u = 0.5, or `easeFractionV1(ease, u)`, unclamped: an overshooting ease places a middle item after the last. Jitter: `m_i = snapToFrameV1(ideal_i) + snapToFrameV1((2 × staggerRandomV1(seed, 2, i) − 1) × J)`. Anchor subtracts `a = m_0` (first), `m_{n−1}` (last) or `snapToFrameV1((m_0 + m_{n−1}) / 2)` (centre) from every `m_i`. Every key of item i moves by exactly `move_i / fps`; a sub-frame base key keeps its fraction. Random order is a Fisher-Yates shuffle on `staggerRandomV1(seed, 1, k)`; ties break by layer order. Cross-fade (Sequence, Layers, overlap > 0) writes Opacity keys with the linear ease (`VERIFY:` the opacity property id and range): item i > 0 fades 0 to full over `[start'_i, start'_i + overlap]`, item i < n − 1 fades full to 0 over `[end'_i − overlap, end'_i]`; occupied frames follow Ruling 7.
 
@@ -78,9 +78,9 @@ export const effectiveLayerOffsetV1 = (doc: DocumentV1, nodeId: string): number 
 
 Each change previews live and commits as one undo step on release or Enter; Escape or a click outside closes and keeps the edits (00 §4). Undo restores keys and fields together (`VERIFY:` 00 §8.8).
 
-**Readout.** Read-only `Total 12 f · Per item 3 f` in the timeline header whenever the selection holds two or more items; `(uneven)` when consecutive gaps differ.
+**Readout.** Read-only `Total 12 f · Per item 3 f` in the timeline header for two or more items; `(uneven)` when gaps differ.
 
-**Time Offset.** The inspector shows an Offset field (frames) on every track and layer. A track with a non-zero effective offset carries a badge, `+6 f` or `+4 f (+6 f from Group)`; the timeline draws its keys at their stored times plus dimmed ghosts at the shifted times, hover text `Offset +6 f. Convert to keys to edit them here.` Track and layer context menus have `Convert offset to keys`.
+**Time Offset.** The inspector shows an Offset field (frames) on every track and layer. A track with a non-zero effective offset carries a badge, `+6 f` or `+4 f (+6 f from Group)`; the timeline draws its keys at their stored times plus dimmed ghosts at the shifted times, hover `Offset +6 f. Convert to keys to edit them.` Track and layer context menus have `Convert offset to keys`. The field edits the same driver as spec 05's Time Offset behaviour entry.
 
 **Keyboard.** Ctrl+Shift+O [Cmd+Shift+O] opens the popover for the selection with Spacing = Per item 0 f and focus in the field (proposed, section 12); `Animate > Stagger…` and `Animate > Sequence…` (`VERIFY:` menu names) do the same.
 
@@ -102,19 +102,19 @@ Each change previews live and commits as one undo step on release or Enter; Esca
 
 ## 7. Evaluation and determinism
 
-Stagger and Sequence are document edits; the evaluator is untouched. The driver: for a track with keys `K`, extrapolation `before`/`after` (spec 08) and a Time Offset of `delay` frames on a node whose ancestors' offsets sum to `L`, `value(t) = rest(keyedV1(K, t − (delay + L) / fps), t)`, where `keyedV1` is the keyed curve with its extrapolation and `rest` the remainder of the driver stack at `t`. `L` is summed at evaluation time; nothing is written into child tracks. Before the first key the `before` rule shows for `delay` frames longer; a negative delay makes the track lead. The subtraction is exact rational arithmetic.
+Stagger and Sequence are document edits; the evaluator is untouched. The driver: for a track with keys `K`, extrapolation `before`/`after` (spec 08) and a Time Offset of `delay` frames on a node whose ancestors' offsets sum to `L`, `value(t) = rest(keyedV1(K, t − (delay + L) / fps), t)`, where `keyedV1` is spec 05's `baseValueAt` (keys, eases, extrapolation) and `rest` the rest of the stack at `t`. `L` is summed at evaluation time; nothing is written into child tracks. Before the first key the `before` rule shows for `delay` frames longer; a negative delay makes the track lead. The subtraction is exact rational arithmetic.
 
-Ruling 9 statement: every value is `evaluate(document, t)`; the driver reads its own keyed curve at one other exact time and carries no state, so play, seek and export agree bit for bit; reading only its own keys, it cannot form a cycle. Nothing bakes for playback. Lottie export, which has no time offset (report 1 §1), converts each offset by the exact shift through spec 05's bake service (`VERIFY:` its name and the exporter hook).
+Ruling 9 statement: every value is `evaluate(document, t)`; the driver reads its own keyed curve at one other exact time and carries no state, so play, seek and export agree bit for bit; reading only its own keys, it cannot form a cycle. Nothing bakes for playback. Lottie export, which has no time offset (report 1 §1), converts each offset by the exact shift through `bakeTrackV1` (spec 05, exact mode; `VERIFY:` the exporter hook).
 
 ## 8. Edge cases and named limits
 
-- A move may place keys before frame 0 (`VERIFY:` negative key times; if refused, the move stops at frame 0 and says so).
-- Jitter is uniform, so clumps occur (report 2 §3); no blue-noise option. Named limit.
+- A move may place keys before frame 0 (`VERIFY:` negative key times; if refused, it stops at frame 0 and says so).
+- Jitter is uniform, so clumps occur (report 2 §3). Named limit.
 - `Convert offset to keys` on a layer shifts every track of the layer and of every descendant by the layer's own offset, then sets it to 0; descendants keep their own offsets, so nothing changes on screen.
 
 ## 9. Interactions with other specs
 
-01: Distribution may use any library ease; a stagger never changes an ease, because handles are normalised (Ruling 1). 05: Follow is the two-track form of Time Offset; the bake service does the export conversion. 06: selection order, runs and Absolute / Offset entry are defined there. 07: the drag controller supplies the snapped travel and Shift snapping. 08: extrapolation applies at the shifted time, so a looping track loops later by the delay. 09: groups are items; the same-frame highlight shows a collision before release. Motion smear (effects plan B9) reads places through the same evaluator, so an offset track smears correctly.
+01: Distribution may use any library ease; a stagger never changes an ease, because handles are normalised (Ruling 1). 05: Follow is the two-track form of Time Offset; 05 folds it as a behaviour entry, and first in the stack the two readings agree; `bakeTrackV1` (exact mode, 05-R8) does the export conversion. 06: selection order, runs and Absolute / Offset entry are defined there. 07: the drag controller supplies the snapped travel and Shift snapping. 08: extrapolation applies at the shifted time, so a looping track loops later by the delay. 09: `groupsOfSelectionV1` supplies group items; the same-frame highlight shows a collision before release. Motion smear (effects plan B9) reads places through the same evaluator, so offset tracks smear correctly.
 
 ## 10. Rules and tests
 
@@ -131,7 +131,7 @@ Each rule is one test in `stagger.test.ts`; numbers are exact.
 - R9 `anchor last and centre`: 0, 3, 6, 9, 12 → −12, −9, −6, −3, 0 and −6, −3, 0, 3, 6.
 - R10 `jitter is seeded and salted`: ±2 f, seed 7, pinned; changing Jitter keeps the random order; Anchor first leaves item 0 at 0.
 - R11 `moves never compound`: per item 5 then 10 from one base → 0, 10, 20, 30, 40.
-- R12 `collision: the later item wins`: flow 5 → `replaced` is 2; undo restores all keys.
+- R12 `collision: the later item wins`: flow 5 → `removed` has 2; undo restores all keys.
 - R13 `Time Offset 4 f at frame 10 equals the unoffset track at frame 6`, `Object.is` per channel; `at frame 2 it equals the before rule at frame −2`.
 - R14 `convert to keys is exact`: frames 0..60 `Object.is` before and after; the driver is gone.
 - R15 `layer offset inherits and adds`: child effective 6 + 4 = 10; Convert on the layer shifts descendants by 6, zeroes the layer, keeps the child's 4, equal at every frame.
@@ -147,7 +147,7 @@ Each rule is one test in `stagger.test.ts`; numbers are exact.
 5. The undo stack can carry the popover's parameters (00 §8.8); the draft render path (00 §8.4).
 6. The keymap for Ctrl+Shift+O; menu names.
 7. The existing wiggle driver's place in the stack (00 §8.2), so Time Offset sits first.
-8. Spec 05's bake service name and exact mode; the Lottie exporter hook.
+8. The Lottie exporter hook.
 9. Whether layers have in and out points.
 
 ## 12. Open questions for the user

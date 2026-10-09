@@ -62,14 +62,19 @@ export interface KeyframeV1<V> {
   readonly tangent: TangentModeV1                 // Ruling 5; a hold on either side forces 'free' at that side
   readonly ease: EaseV1                           // the ease of the segment starting at this key; ignored on the last key
   readonly label?: KeyLabelV1                     // spec 09
+  readonly kind?: 'key' | 'breakdown' | 'extreme' // spec 09; glyph and filters only, never evaluation
+  readonly id?: string                            // spec 09; stable id assigned lazily for group membership
+  readonly join?: 'joined' | 'broken'             // spec 04; editor-only: handles either side of the key stay mirrored; default 'joined'
+  readonly settle?: 'skip'                        // spec 05; per-key opt-out of Settle behaviours
 }
 
 export type EaseV1 =
   | { readonly type: 'bezier'; readonly x1: number; readonly y1: number; readonly x2: number; readonly y2: number }   // x in [0,1], y free
   | { readonly type: 'hold' }
   | { readonly type: 'spring'; readonly duration: number; readonly bounce: number }       // Apple form; spec 01 §springs
-  | { readonly type: 'elastic'; readonly amplitude: number; readonly period: number }     // Rive/Penner form
-  | { readonly type: 'bounce'; readonly bounces: number; readonly restitution: number }
+  | { readonly type: 'elastic'; readonly amplitude: number; readonly period: number; readonly direction?: EaseDirectionV1 }     // Rive/Penner form
+  | { readonly type: 'bounce'; readonly bounces: number; readonly restitution: number; readonly direction?: EaseDirectionV1 }
+export type EaseDirectionV1 = 'in' | 'out' | 'in-out'      // default 'out'; spec 01
 
 export const LINEAR_EASE_V1: EaseV1 = { type: 'bezier', x1: 0, y1: 0, x2: 1, y2: 1 }
 export const DEFAULT_EASE_V1: EaseV1 = { type: 'bezier', x1: 0.2, y1: 0, x2: 0, y2: 1 }   // Material "standard"; spec 01 Ruling
@@ -82,6 +87,7 @@ export interface TrackV1<V> {
   readonly after: ExtrapolationV1
   readonly drivers: readonly DriverV1[]          // Ruling 12
   readonly c2: boolean                            // Ruling 5 opt-in
+  readonly bakes?: readonly BakeRecordV1[]        // spec 05; retained sources so Unbake restores them exactly
 }
 
 // Evaluation (pure; Ruling 9)
@@ -114,15 +120,21 @@ export interface KeySelectionV1 { readonly keys: ReadonlySet<string /* `${trackI
 | Gesture | Meaning | Spec |
 | --- | --- | --- |
 | Drag a key | Move in time, snapped to whole frames; value unchanged | 07 |
-| Shift + drag a key | Also snap to other keys, markers and the playhead | 07 |
+| Shift + drag a key | Also snap to other keys, markers, guides and the playhead; in the graph, also to other keys' values | 07, 09, 04 |
 | Ctrl [Cmd] + drag a key | Free sub-frame placement for this drag | 07 |
 | Alt [Option] + drag a key | Duplicate the selection and drag the copy | 10 |
 | Drag the edge handle of a multi-key selection | Proportional retime about the far edge; ripple later keys unless Shift is held | 07, 08 |
-| Ctrl+Alt [Cmd+Option] + drag a selection | Stagger: the first item stays, the last moves the full drag, the rest spread evenly; opens the Stagger popover on release | 02 |
+| Ctrl+Alt [Cmd+Option] + drag a selection | Stagger: the first item stays, the last moves the full drag, the rest spread evenly; Shift while dragging snaps the item under the pointer; opens the Stagger popover on release | 02 |
 | Double-click a segment bar | Open the Ease popover for that segment | 01 |
-| Right-click a segment bar | Context menu: presets, Paste Ease, Hold, Linear, Reset to Auto | 01, 03 |
+| Right-click a segment bar | Context menu: presets, Copy Ease, Paste Ease (submenu: mirrored in time, pass-through), Paste Values Only, Hold, Linear, Reset to Auto | 01, 03 |
+| Right-click a key | Context menu for the segment starting at the key: Copy Ease, Paste Ease, Paste Values Only; label; kind | 03, 09 |
+| Double-click the ruler | Add a time guide at that frame | 09 |
 | Marquee | Select keys in the box; Shift adds; Alt subtracts; layers are not deselected | 06 |
-| Click a track name | Select every key on the track, in every view | 06 |
+| Click a track name | Select every key on the track, in every view; Shift adds a track; Alt [Option] removes the track's keys from the selection | 06 |
+| Alt [Option] + drag a handle in the graph | Break the join at that key; handles are joined by default. Alt is resolved by hit target: handle, then key (duplicate), then empty space (marquee subtract) | 04 |
+| Shift + drag a popover handle | Constrain the handle horizontally | 01 |
+| Ctrl [Cmd] + drag a popover handle | Move both handles of the segment mirrored | 01 |
+| Alt [Option] + drag an influence slider | Move both sliders mirrored | 01 |
 | Scrub a number field | Drag changes the value; Shift steps by 10, Ctrl [Cmd] by 0.1; with several keys selected the change is an offset | 06 |
 | Type into a number field with several keys selected | Absolute by default; the field shows an Absolute / Offset toggle | 06 |
 
@@ -133,17 +145,28 @@ export interface KeySelectionV1 { readonly keys: ReadonlySet<string /* `${trackI
 | J / K | Previous / next key among the selected layers' visible tracks; with nothing selected, all layers | 10 |
 | Shift+J / Shift+K | Previous / next key on all layers | 10 |
 | Alt+Left / Alt+Right | Nudge selected keys one frame; Alt+Shift nudges ten | 07 |
-| Ctrl+C / Ctrl+V | Copy keys; paste at the playhead to the selected layers | 10 |
+| Ctrl+C / Ctrl+X / Ctrl+V | Copy or cut keys; paste at the playhead to the selected layers | 10 |
 | Ctrl+Shift+V | Paste reversed | 10 |
 | Ctrl+Alt+V | Paste ease only (values kept); Ctrl+Alt+Shift+V pastes values only | 03 |
 | Ctrl+Shift+E | Open the Ease popover for the selected segments | 01 |
 | Ctrl+Shift+G | Toggle the graph editor for the selected tracks | 04 |
-| Ctrl+Shift+F | Snap all selected keys to whole frames | 07 |
+| Ctrl+Shift+F | Snap the selected keys to whole frames; every key when nothing is selected | 07 |
+| Ctrl+Alt+A | Select every key on the selected layers, collapsed tracks included; all layers when none selected | 06 |
+| Ctrl+Shift+O | Open the Stagger popover for the selected keys | 02 |
+| Ctrl+Shift+R | Open the Retime dialog for the selected keys | 08 |
+| Ctrl+Alt+R | Time-Reverse the selected keys in place | 08 |
+| Ctrl+Shift+B | Open the Add behaviour menu for the selected property | 05 |
+| Alt+Up / Alt+Down | With a behaviour row focused, move it up or down; otherwise previous or next track keyed at the playhead | 05, 09 |
+| Ctrl+Alt+1 to 8 / Ctrl+Alt+0 | Label the selected keys with palette colour 1 to 8; 0 clears. AltGr layouts use the context menu | 09 |
+| Ctrl+Alt+J | Go to key number | 10 |
+| Up / Down on a focused influence slider | Nudge 1 %; Shift 10 %; Ctrl [Cmd] 0.1 % | 01 |
+| F / Shift+F / N (graph focused) | Fit selection / Fit all / toggle Normalise | 04 |
+| Ctrl+A (graph focused) | Select every key shown in the graph | 04 |
 | 1 to 9 | Apply ease library slots 1 to 9 to the selected segments | 01 |
 
 **Popover pattern.** A popover is anchored to the thing it edits, opens in one gesture, previews live on the canvas and timeline as the user drags, commits on every change as one undo step per release, and closes on Escape (reverting nothing: the committed edits stay) or on a click outside. A popover never steals the selection.
 
-**Number fields.** Unit suffixes are typed and parsed (`12f`, `0.4s`, `40%`); a field shows the composition's unit by default (frames for time). Expressions of the form `+5`, `-5`, `*2` apply an offset or scale to every selected key.
+**Number fields.** Unit suffixes are typed and parsed (`12f`, `0.4s`, `40%`); a field shows the composition's unit by default (frames for time). Expressions of the form `+5`, `-5`, `*2`, `/2` apply an offset or scale to every selected key; with several keys selected a leading `-` is an offset and `=-5` forces an absolute negative (spec 06).
 
 **Live preview.** Every edit in a popover or the graph renders the canvas at the playhead and, when the playhead is outside the edited segment, also draws a ghost of the segment's end pose on the canvas. `VERIFY:` the worker's draft-quality path for scrubbing is reusable for popover previews.
 
@@ -192,5 +215,16 @@ Existing documents (`VERIFY:` the current key and ease storage) are read through
 
 ## 9. Unresolved questions for the user
 
-1. Ruling 7 chooses one key per frame with the one-frame-later cut as a named limit. The alternative is a jump key with an arrive and a leave value. Confirm or overturn before spec 10's paste rules are built.
-2. The default ease (Material standard, `cubic-bezier(0.2, 0, 0, 1)`) is asymmetric. A symmetric default (AE's Easy Ease, `(0.33, 0, 0.67, 1)`) is what migrating users expect. Confirm the asymmetric default.
+Decisions the feature specs made that depart from, or go beyond, this overview and the briefs, listed first because they bind until overturned:
+
+1. **Ruling 7** chooses one key per frame with the one-frame-later cut as a named limit. The alternative is a jump key with an arrive and a leave value. Spec 10's paste rules depend on it; confirm or overturn before spec 10 is built.
+2. **Default ease** is Material standard, `cubic-bezier(0.2, 0, 0, 1)`, asymmetric; spec 01 adds a "Set as default" document setting. A symmetric default (AE's Easy Ease, `(0.33, 0, 0.67, 1)`) is what migrating users expect. Confirm the asymmetric default.
+3. **Spec 03 drops the direction flip.** With normalised handles an ease-out stays an ease-out whether the value rises or falls, so EaseCopy's flip (which exists because AE stores signed speeds) is unnecessary. Spec 03 ships "Mirror in time" as an explicit option, off by default. Confirm.
+4. **Spec 02** makes a layer-level Time Offset inherit and add down the parent chain (a delayed group delays its children further). It also asks whether a move may place keys before frame 0 and whether Items = Layers moves layer bars with the keys.
+5. **Spec 05** asks whether Wiggle exposes a per-octave multiplier, per-channel amplitude and a loop length; whether the Lottie export dialog allows a tolerance per track; and whether raw samples of an imported recording are kept for a re-fit.
+6. **Spec 08** asks whether "loop the last N keys" is wanted; proposes that `continue` extrapolation bakes exactly (one key on the line) rather than by fit; and asks what Anchor = Playhead does when the playhead is outside the selection.
+7. **Spec 06** defaults Proportional scrubbing to Offset for Position and Anchor Point, keeps labels at their time under Reverse, uses a hundredths grid for sub-frame values, and clamps keys at frame 0. Confirm each.
+8. **Spec 09** defaults the per-layer summary row to on when a layer is expanded and keeps guides in place under a ripple retime. Confirm.
+9. **Spec 10** makes J/K visit keys only (not markers or work-area edges) and stop at the ends; paste with property links is deferred. Confirm.
+10. **Spec 01** stores spring, elastic and bounce parameters as shares of the segment, not seconds; **spec 03** writes a procedural ease's text fallback in the app's own `spring(…)` syntax rather than a bezier approximation. Confirm both.
+11. **Spec 04** defers roving keys (Adobe's solver is unpublished), keeps handle selection out of `KeySelectionV1`, and resolves a merge of split channels with unequal eases by "larger delta wins". Confirm.
