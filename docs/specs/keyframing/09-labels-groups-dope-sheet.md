@@ -4,7 +4,7 @@ Written without the repository open; assumptions about unseen code are marked `V
 
 ## 1. Purpose and evidence
 
-The June 2026 dope-sheet request asks to see "which layers hit on the same frame and where holds and overshoots fall" without "manually expanding and collapsing properties" (report 2, "Timing" section and ranked table, rank 9). Keyframe colour labels and grouping "like Nuke's backdrop node" have been on the After Effects wishlist since 2008 and 2012, and a 2025 utility still sells a "Keyframes Label Group" selector (report 2, "Adobe fixed timeline mechanics" and "Bulk editing" sections). Blender's typed keys change "only the colour" (report 1 §2; editor-UX research note, KQ5). Keyframe guides are a separate open request (timing-tools research note, KQ5).
+The June 2026 dope-sheet request asks to see "which layers hit on the same frame and where holds and overshoots fall" without "manually expanding and collapsing properties" (report 2, "Timing" section and ranked table, rank 9). Keyframe colour labels and grouping "like Nuke's backdrop node" have been on the After Effects wishlist since 2008 and 2012, and a 2025 utility still sells a "Keyframes Label Group" selector (report 2, "Adobe fixed timeline mechanics" and "Bulk editing" sections). Blender's typed keys change "only the colour" (report 1 §2; editor-UX research note, KQ5). Guides are a separate open request (timing-tools research note, KQ5).
 
 ## 2. Scope and non-goals
 
@@ -103,7 +103,7 @@ Rules, each a test: R1 a summary diamond at 12 exists iff a track keys at 12. R2
 Tests by name (`summary-row.test.ts`, `key-labels.test.ts`, `key-groups.test.ts`, `time-guides.test.ts`):
 - T1 `summaryRowV1: a diamond at 12 exists iff a track keys at 12`: tracks keyed {0, 12}, {12, 24}, {5} at 24 fps give entries 0, 5, 12, 24 with two trackIds at 12; delete both keys at 12: no entry. T2 `badge and colour`: two Red keys at 12 → colour 1; one Red, one unlabelled → null.
 - T3 `moveSummaryDiamondV1 moves every key at 12 by 2 frames, eases unchanged`: Position (bezier, free) and Opacity (hold) land at exactly 14/24, eases and tangents deep-equal, the Opacity occupant at 14 gone, label "Move 2 keys (replaced 1)". T4 `undo of T3 restores the replaced key`.
-- T5 `select by label selects only labelled keys`: 3 Red, 2 Blue, 5 unlabelled; Red → 3; Red and Blue → 5; Any → 5; None → 5.
+- T5 `select by label selects only labelled keys`: 3 Red, 2 Blue, 5 unlabelled; Red → 3; Red and Blue → 5; None → 5.
 - T6 `a group survives undo of an unrelated edit`: 6 members; set a value on another track; undo; members 6, ids equal. T7 `membership survives a nudge and a stagger`: +3 frames; `liveMembersV1` lists 6 at the shifted exact times. T8 `a deleted key leaves the group; undo returns it`: delete 2 → 4 live; delete all → `[]`; undo → 6.
 - T9 `spanCoverageV1: the overlap equals the intersection`: Position 10..40 and Scale 30..60 → count 2 exactly on [30, 40]; disjoint bars → no count 2; identical bars → the whole span.
 - T11 `guides are stored and reloaded`: guides at 24/24 "Beat 1" and 37/24 "Beat 2" locked; serialise, parse → deep-equal including `n`, `d`, `locked`; an old document loads `[]`. T12 `guides are unique whole frames`: add at 24.4 frames → 24/24; add at 24 again → the existing id.

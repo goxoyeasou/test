@@ -107,7 +107,7 @@ Dragging, nudging, scaling and snapping are pure functions `(document, …) → 
 - Sub-frame keys in a dragged selection keep their fraction (07-R2 keeps relative times); Snap Keys to Frames repairs them on demand. Named limit against Ruling 8's letter, in favour of its intent.
 - Ripple moves keys on the same tracks only; other tracks, markers and the work area stay. Named limit; spec 08's ripple retime covers the layer. When the far edge is the last key, nothing ripples.
 - Edge drag with keys on several tracks: the minimum span is the smallest span valid on every track. When the proposed span collides, the preview uses the nearest valid span in the drag's direction and sets `stopped`.
-- Snap All with several keys landing on one frame: the latest original wins; the removed ids leave the selection and count as missing in Key Sets (spec 06). 
+- Snap All with several keys landing on one frame: the latest original wins; the removed ids leave the selection and count as missing in Key Sets (spec 06).
 
 ## 9. Interactions with other specs
 
