@@ -10,7 +10,7 @@ One popover on the bar between two keys replaces F9, the Keyframe Velocity dialo
 
 In scope: the Ease popover; the influence-to-handle mapping; Bezier, Hold, Spring, Elastic and Bounce with their closed forms; the preset grid; Apply to all selected; the library with slots 1 to 9 and JSON import and export; Reset to Auto; live preview; the timeline bar glyph; the right-click entries of 00 §4.
 
-Non-goals: the graph editor (spec 04, which draws the same object); Copy and Paste Ease (spec 03); Settle, Follow, Wiggle and the bake service (spec 05); selection (spec 06); multi-segment eases between one key pair (report 1 §4; `EaseV1` has no such variant, section 12); per-channel eases (00 Ruling 3); colour gamut mapping after an overshoot.
+Non-goals: the graph editor (spec 04, which draws the same object); Copy and Paste Ease (spec 03); Settle, Follow, Wiggle and the bake service (spec 05); selection (spec 06); multi-segment eases between one key pair (report 1 §4; section 12); per-channel eases (00 Ruling 3); colour gamut mapping after an overshoot.
 
 ## 3. Rulings
 
@@ -51,7 +51,7 @@ Ranges (`EASE_RANGES_V1`, same module): influence 0 to 100, step 0.01 (0 is a ha
 `autoEaseV1`: slopes `m0=autoTangentSlopeV1(prev, a, b)`, `m1=autoTangentSlopeV1(a, b, next)` in value per second, `Δt=b.t−a.t`, `Δv=b.v−a.v`: `x1=1/3`, `y1=m0·Δt/(3Δv)`, `x2=2/3`, `y2=1−m1·Δt/(3Δv)`; when `Δv=0`, `y1=0, y2=1` (Hermite handles at one third of the interval, report 1 §1). A `free` key keeps its stored side; a hold on either side leaves the segment untouched; with `track.c2` the slopes come from spec 04's C2 solve.
 
 **Closed forms** (`u∈[0, 1]`, fixed arithmetic in `u`; every type returns the literal 0 at `u≤0` and 1 at `u≥1`):
-- Bezier: `y(solveBezierXV1(x1, x2, u))`, with the linear shortcut when `x1=y1` and `x2=y2`, as bezier-easing.
+- Bezier: `y(solveBezierXV1(x1, x2, u))`, with the linear shortcut when `x1=y1` and `x2=y2`.
 - Spring (Apple WWDC23; Motion `spring.ts` and plan 031): `ω0=2π/duration`, `ζ=1−bounce`, zero initial velocity, raw `s(t)`: for `ζ<1`, `ωd=ω0·√(1−ζ²)` and `s=1−e^(−ζω0t)·(cos(ωd·t)+(ζω0/ωd)·sin(ωd·t))`; for `ζ=1`, `s=1−e^(−ω0t)·(1+ω0t)`; for `ζ>1`, `r=√(ζ²−1)`, `k=ζ+r`, `λslow=−ω0/k`, `λfast=−ω0·k`, `cslow=k/(2r)`, `cfast=1−cslow`, `s=1−(cslow·e^(λslow·t)+cfast·e^(λfast·t))`, the two-exponential form that avoids cancellation. Output `f(u)=s(u)+u·(1−s(1))`.
 - Elastic (Penner ease-out, easings.net and Rive `elastic_ease.cpp`): `a≥1`, `p=period`, `sh=(p/2π)·asin(1/a)`, `e(t)=a·2^(−10t)·sin((t−sh)·2π/p)+1`; output `e(u)+u·(1−e(1))`.
 - Bounce (Penner ease-out generalised; Penner's 7.5625 and 2.75 are `N=3, r=0.5`): fall width `t0=1/(1+2·Σ_{k=1..N} r^k)`; for `u<t0`, `(u/t0)²`; bounce `k` starts at `t0·(1+2·Σ_{j<k} r^j)`, has half-width `h=r^k·t0` and centre `c=start+h`; inside it, `1−r^(2k)·(1−((u−c)/h)²)`, the last bounce taking `u≤1`.
@@ -69,15 +69,15 @@ Ranges (`EASE_RANGES_V1`, same module): influence 0 to 100, step 0.01 (0 is a ha
 
 **Bezier.** A handle graph (unit square, 160 px wide, `VERIFY:` the popover width) with P1 and P2 draggable anywhere in `x∈[0, 1]`; the vertical range grows to fit `y`; no modifiers until section 12's proposals are accepted. Below it the In and Out influence sliders, 0 to 100 % with two decimals, and a centre handle that drags both mirrored (Mt. Mograph's Ease Sliders and Easy Keyframes, report 2 §2); scrubbing follows 00 §4's number-field steps. The numeric field shows `cubic-bezier(0.2, 0, 0, 1)` and accepts, on Enter, `cubic-bezier(a, b, c, d)`, four numbers, or a CSS keyword; an `x` outside `[0, 1]` or a non-finite number keeps the field red with "x values must be between 0 and 1" and changes nothing.
 
-**Procedural controls.** Spring: Duration 10 to 100 % of the segment, Bounce −100 to 90 %, hover text "Settles by 0.42 s on this segment"; Elastic: Amplitude 1 to 3, Period 10 to 100 %; Bounce: Bounces 1 to 6, Restitution 10 to 90 %; the graph shows the curve read-only at 64 samples (a display constant).
+**Procedural controls.** Spring: Duration 10 to 100 % of the segment, Bounce −100 to 90 %, hover text "Settles by 0.42 s on this segment"; Elastic: Amplitude 1 to 3, Period 10 to 100 %; Bounce: Bounces 1 to 6, Restitution 10 to 90 %; the graph shows the curve read-only at 64 samples.
 
-**Preset grid.** Groups CSS, Material, AE and Penner; the Penner group is a table of families by In, Out and In-out, where elastic and bounce have the Out cell only (Blender's "Automatic" easing also picks ease-out for them, report 1 §4). Hovering a cell previews on the graph and canvas without committing (the Flow request, report 2 §2); clicking commits one step. A search field filters by name. Buttons: "Set as default", "Reset to Auto" (enabled when either key is `free`), "Save to library", "Apply to all selected", Copy and Paste (spec 03).
+**Preset grid.** Groups CSS, Material, AE and Penner; the Penner group is a table of families by In, Out and In-out, where elastic and bounce have the Out cell only (Blender's "Automatic" easing also picks ease-out for them, report 1 §4). Hovering a cell previews on the graph and canvas without committing (the Flow request, report 2 §2); clicking commits one step. Buttons: "Set as default", "Reset to Auto" (enabled when either key is `free`), "Save to library", "Apply to all selected", Copy and Paste (spec 03).
 
 **Library strip.** The first nine entries as chips numbered 1 to 9; the keys 1 to 9 apply them whenever the timeline or the popover has focus and no text field is active (00 §4); the menu has Import, Export and Manage.
 
 **Timeline bar glyph.** A 12 px glyph at the bar's centre (`VERIFY:` the bar height): a miniature curve for bezier, a step for hold, a damped wave for spring, a wave with a tall first peak for elastic, three shrinking arcs for bounce; hover text names it, "Spring, bounce 30 %, settles by 100 %". The graph editor (spec 04) draws a procedural ease as a sampled curve without handles.
 
-**Live preview and errors.** Every change renders the canvas at the playhead; outside the segment the ghost of 00 §4 is drawn. The last key of a track has no segment: hover text reads "No ease after the last key". With nothing selected, Ctrl+Shift+E shows "Select a segment or two keys first".
+**Live preview and errors.** Every change renders the canvas at the playhead; outside the segment the ghost of 00 §4 is drawn. The last key of a track has no segment: hover text reads "No ease after the last key". With nothing selected, Ctrl+Shift+E shows "Select a segment first".
 
 ## 6. User flows
 
@@ -85,7 +85,7 @@ Ranges (`EASE_RANGES_V1`, same module): influence 0 to 100, step 0.01 (0 is a ha
 2. **Keyboard only.** Start: an Opacity segment selected, timeline focused, "Snappy" in library slot 3. Press 3: Snappy applies, the glyph changes. Ctrl+Shift+E: the popover opens with focus on the Out slider. Shift+Up twice: Out rises by 20, the preview updates. Tab to the numeric field, type `cubic-bezier(0.2, 0, 0, 1)`, Enter: Material standard. Escape. End: Material standard on the segment, three undo steps.
 3. **Multi-selection: one ease across a stagger.** Start: twelve layers' Position segments selected (spec 02 made the stagger). Ctrl+Shift+E: header "12 eases", fields "mixed". Click "ease-out": every segment becomes `(0, 0, 0.58, 1)` in one undo step and every layer follows its own path with the same arc-length ease. Choose Spring, Bounce 40 %: twelve springs, twelve glyphs. End: twelve identical normalised springs; durations unchanged.
 4. **Undo.** Start: flow 1's end, popover open. Ctrl+Z: the 60 % slider state returns; the popover stays open and shows it; selection unchanged. Ctrl+Z: the derived auto ease, badge "Auto". Redo (`VERIFY:` the keymap): forward one. End: the slider state; the view never moved.
-5. **Limit: overshoot between equal values.** Start: Rotation keys at 0f (0°) and 10f (0°). Open the popover, choose Elastic: the canvas does not move and the header reads "Both keys have the same value, so this ease moves nothing. Add a middle key or a Settle behaviour". End: the ease is stored, the layer rests (section 8).
+5. **Limit: overshoot between equal values.** Start: Rotation keys at 0f (0°) and 10f (0°). Open the popover, choose Elastic: the canvas does not move and the header reads "Both keys have the same value, so this ease moves nothing. Add a middle key or a Settle behaviour". End: the ease is stored, the layer rests.
 6. **Library round trip.** Start: popover open on a tuned bezier. "Save to library", name "Lift": chip 4 appears. Export writes `Lift.eases.json` (`VERIFY:` the file picker). On another machine, Import: "1 added, 0 skipped". End: slot 4 is "Lift" there too.
 
 ## 7. Evaluation and determinism
@@ -94,18 +94,17 @@ For a time `t` inside the segment from key `a` to key `b`: `u=(t−a.time)/(b.ti
 
 ## 8. Edge cases and named limits
 
-- Equal key values: any ease, including elastic and spring, moves nothing, because the fraction scales `Δv=0`; handles are not values, unlike Rive's Cubic Value. Named limit: a bump between equal values needs a middle key or a Settle driver (spec 05).
+- Equal key values: any ease, including elastic and spring, moves nothing, because the fraction scales `Δv=0`; handles are not values. Named limit: a bump between equal values needs a middle key or a Settle driver (spec 05).
 - Spring at bounce −100 %: ζ = 2, a slow approach whose residual at `u=1` is about 0.2 of the move at duration 100 %; hover text says "Shorten the duration for a sharper settle". Overshoot on colour may leave gamut; mapping is the colour spec's job.
-- Lottie export: hold and overshoot `y` are representable; procedural eases are baked (spec 05).
 
 ## 9. Interactions with other specs
 
 - 03: Copy and Paste buttons; `targetSegmentsV1`, `parseCubicBezierV1`, `formatCubicBezierV1` and `setSegmentEaseV1`.
 - 04: the graph draws the same `EaseV1`; a handle drag calls `setSegmentEaseV1`; procedural eases have no handles; the C2 opt-in feeds `autoEaseV1`.
 - 05: the bake service samples `easeFractionV1` on export; Settle answers the equal-values limit.
-- 06: selection semantics and the number-field steps; the popover never changes selection.
+- 06: selection semantics and the number-field steps.
 - 07 and 08: retime, stagger and loops never touch the ease; normalised handles keep easing proportional by construction.
-- 10: plain paste carries eases with keys; Paste Reversed mirrors each bezier in time with spec 03's `mirrorEaseInTimeV1`.
+- 10: plain paste carries eases with keys; Paste Reversed uses spec 03's `mirrorEaseInTimeV1`.
 
 ## 10. Rules and tests
 
@@ -137,13 +136,12 @@ Each rule is one test in `ease.test.ts` (D1 to D4 in `ease.determinism.test.ts`)
 6. The worker's draft-quality render path for per-edit preview.
 7. The undo stack's granularity (one step per release).
 8. The timeline bar's height for the glyph; the track order API for `targetSegmentsV1`.
-10. Spec 05's bake tolerance for D4 and the Lottie exporter's hook.
-11. The thirteen easings.net values not quoted in the research note.
+9. Spec 05's bake tolerance for D4 and the Lottie exporter's hook.
+10. The thirteen easings.net values not quoted in the research note.
 
 ## 12. Open questions for the user
 
 1. The asymmetric default (00 open question 2): this spec keeps Material standard and adds "Set as default". Confirm.
-2. Spring, elastic and bounce parameters are shares of the segment (01-R4), so a spring keeps its shape when pasted or retimed; seconds would keep the absolute feel and let a short segment cut a spring off. Confirm shares.
+2. Spring, elastic and bounce parameters are shares of the segment (01-R4), so a spring keeps its shape when pasted or retimed; seconds would let a short segment cut a spring off. Confirm shares.
 3. Proposed addition to 00 §3: an optional `direction: 'in' | 'out' | 'in-out'` on the elastic and bounce variants of `EaseV1`, default `'out'`.
-4. Multi-segment eases between one key pair (report 1 §4) are out of scope; plan a `path` variant of `EaseV1`?
-5. Proposed addition to 00 §4: Shift + drag a popover handle constrains it horizontally; Ctrl [Cmd] + drag a handle moves both mirrored; Up / Down on a focused influence slider nudge by 1 % (Shift 10, Ctrl 0.1); Alt [Option] + drag a slider moves both mirrored.
+4. Proposed addition to 00 §4: Shift + drag a popover handle constrains it horizontally; Ctrl [Cmd] + drag a handle moves both mirrored; Up / Down on a focused influence slider nudge by 1 % (Shift 10, Ctrl 0.1); Alt [Option] + drag a slider moves both mirrored.

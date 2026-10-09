@@ -14,21 +14,19 @@ Non-goals: moving keys in time (spec 07), copy and paste (10), ease editing (01,
 
 ## 3. Rulings
 
-- **06-R1 (selection by scope, never by view):** every Select command, name click and Key Set recall selects by document scope; collapsed, scrolled-off, shy and hidden tracks are included and the status bar reports the count. Only the marquee is a box on the screen, and it reaches a collapsed layer through its summary row (spec 09). Why: report 2 §5; AE's visible-only Ctrl+Alt+A silently excludes collapsed properties from bulk moves. Cost if wrong: nothing; the view-based variant is a subset the marquee provides.
-- **06-R2 (one selection, keyed by time):** `KeySelectionV1` (00 §3) is the only selection; ids are `${trackId}@${serializedTime}`. Every edit that moves or removes keys returns the id moves it caused and the selection store applies them, so the selection follows its keys through edits, undo and redo without being in the undo stack (Ruling 11). Why: report 1 §2 (AE drops the selection when the graph opens; Rive undoes pan and zoom with a deletion). Cost if wrong: stale ids after a drag; the remap is one function.
+- **06-R1 (selection by scope, never by view):** every Select command, name click and Key Set recall selects by document scope; collapsed, scrolled-off, shy and hidden tracks are included and the status bar reports the count. Only the marquee is a box on the screen, and it reaches a collapsed layer through its summary row (spec 09). Why: report 2 §5; AE's visible-only Ctrl+Alt+A silently excludes collapsed properties from bulk moves. Cost if wrong: nothing; the marquee already provides the view-based variant.
+- **06-R2 (one selection, keyed by time):** `KeySelectionV1` (00 §3) is the only selection; ids are `${trackId}@${serializedTime}`. Every edit that moves or removes keys returns the id moves it caused and the selection store applies them, so the selection follows its keys through edits, undo and redo without being in the undo stack (Ruling 11). Why: report 1 §2 (selection lost when AE's graph opens; Rive's undo moving the view). Cost if wrong: stale ids after a drag; the remap is one function.
 - **06-R3 (bulk arithmetic in grid units):** Absolute, Offset and scale edits compute in integer units of the property's precision (`VERIFY:`; assumed hundredths) and write `units / 10^precision` back. Why: double addition does not preserve differences bit for bit; in integer units the difference between two selected values is unchanged by construction. Cost if wrong: an off-grid value from a bake or import moves by at most half a unit on its first bulk edit (section 8).
-- **06-R4 (Proportional scales about zero):** Proportional scrubbing multiplies every selected value by one factor `k` about zero, not about the selection's minimum. Why: ratios are what proportional means; a keyed zero stays zero, so a fade in stays a fade in; the factor is one number the readout shows and the user can type as `*1.25`, so scrub and expression share one code path. Cost if wrong: one pivot parameter.
-- **06-R5 (Reverse is an order reversal, not a time reversal):** selected keys keep their times; per track the selected values reverse in order, and the selected segments' eases reverse in order and are mirrored by spec 03's `mirrorEaseV1`; unselected keys and half-selected segments are untouched. Why: report 2 §5 (the "won't fix" bug); keeping times lets a sparse selection reverse without touching anything between. Cost if wrong: nothing; it is a pure function of the selection.
+- **06-R4 (Proportional scales about zero):** Proportional scrubbing multiplies every selected value by one factor `k` about zero, not about the selection's minimum. Why: ratios are what proportional means; a keyed zero stays zero, so a fade in stays a fade in; the factor is one number the readout shows and the user can type as `*1.25`. Cost if wrong: one pivot parameter.
+- **06-R5 (Reverse is an order reversal, not a time reversal):** selected keys keep their times; per track the selected values reverse in order, and the selected segments' eases reverse in order and are mirrored by spec 03's `mirrorEaseV1`; unselected keys and half-selected segments are untouched. Why: report 2 §5 (the "won't fix" bug); keeping times lets a sparse selection reverse without touching anything between. Cost if wrong: nothing.
 - **06-R6 (one field per value kind):** keys spanning several tracks get one inspector field per value kind and unit; Absolute is allowed only when the tracks are one property or share a range, otherwise Offset is forced on. Why: AE's "same layer property" rule is a data-model limit, not a UX choice (research note, KQ1 inferences). Cost if wrong: per-track rows added under the field.
 - **06-R7 (Key Sets live in the document and go stale, never shrink):** a deleted member counts as missing until the user prunes. Why: zl_Scriptlets' Key Sets exist because selections do not survive timing changes; dropping members silently would lose exactly the keys the user wanted back. Cost if wrong: one prune command.
-- **06-R8 (cost follows visible keys, not selected keys):** the selection is a `Set` of ids; the timeline draws only visible keys and asks `has` once per drawn key; an edit touches each selected track once. Why: report 2 §1, the August 2026 bug. Cost if wrong: T12 fails.
 
 ## 4. Model and interfaces
 
 ```ts
 // src/animation-core/keyframes/key-selection.ts
 export type KeyIdV1 = string          // `${trackId}@${serializedTime}`; VERIFY serializeExactTime
-export const keyIdV1 = (trackId: string, time: ExactTime): KeyIdV1
 // KeySelectionV1.segments holds bar-clicked segments only; a segment is named by the key that starts it
 export const selectedSegmentsV1 = (doc: DocumentV1, s: KeySelectionV1): ReadonlySet<KeyIdV1>   // bar-clicked, plus segments whose two keys are selected
 
@@ -42,15 +40,14 @@ export type SelectScopeV1 =
   | { kind: 'easeType'; ease: EaseV1['type'] | 'linear' | 'auto'; nodeIds: readonly string[] | 'all' }
   | { kind: 'label'; label: KeyLabelV1; nodeIds: readonly string[] | 'all' }
   | { kind: 'invert' }                                    // within tracks holding a selected key; all when none
-  | { kind: 'marquee'; trackIds: readonly string[]; from: ExactTime; to: ExactTime }   // the rows the box covers
+  | { kind: 'marquee'; trackIds: readonly string[]; from: ExactTime; to: ExactTime }
 export const selectKeysV1 = (doc: DocumentV1, scope: SelectScopeV1, current: KeySelectionV1, mode: SelectModeV1): KeySelectionV1
 
 export interface KeySetV1 { readonly id: string; readonly name: string; readonly members: readonly KeyIdV1[] }   // document data
 export const keySetStatusV1 = (doc: DocumentV1, set: KeySetV1): { present: number; missing: number }
 export const trackTimeIndexV1 = <V>(track: TrackV1<V>): ReadonlyMap<string, number>   // serialised time to index, memoised by keys identity
 
-export interface KeyMoveV1 { readonly from: KeyIdV1; readonly to: KeyIdV1 }
-export interface EditResultV1 { readonly doc: DocumentV1; readonly moves: readonly KeyMoveV1[]; readonly removed: readonly KeyIdV1[]; readonly report?: string }
+export interface EditResultV1 { readonly doc: DocumentV1; readonly moves: readonly { from: KeyIdV1; to: KeyIdV1 }[]; readonly removed: readonly KeyIdV1[]; readonly report?: string }
 export type BulkEditV1 =
   | { type: 'absolute'; value: number | readonly number[] }
   | { type: 'offset'; delta: number | readonly number[] }
@@ -64,13 +61,13 @@ export interface FieldGroupV1 { readonly kind: ValueKindV1; readonly unit: strin
 export const fieldGroupsV1 = (doc: DocumentV1, selection: KeySelectionV1): readonly FieldGroupV1[]
 ```
 
-The selection store (UI side) holds one `KeySelectionV1`, applies `moves` and `removed` from every `EditResultV1`, in reverse on undo and forward on redo (the moves ride on the undo entry as travel data, not document state; `VERIFY:` 00 §8.8), and persists across view switches and playback. A marquee binary-searches each covered track's sorted keys for its time range. Position tracks are `vec2`; Ruling 10's path is rebuilt from the keyed points after an edit.
+The selection store (UI side) holds one `KeySelectionV1`, applies `moves` and `removed` from every `EditResultV1`, in reverse on undo and forward on redo (the moves ride on the undo entry as travel data, not document state; `VERIFY:` 00 §8.8), and persists across view switches and playback. A marquee binary-searches each covered track's sorted keys for its time range; the timeline draws only visible keys and asks `has` once per drawn key, so cost follows visible keys, not selected keys (report 2 §1, the August 2026 bug). Position tracks are `vec2`; Ruling 10's path is rebuilt from the keyed points after an edit.
 
 ## 5. UX
 
 **Selecting.** One highlight in the timeline, the graph (spec 04), the inspector's key badges and the canvas (selected Position keys are points on the motion path). Click a key: replace. Shift-click: toggle. Click a segment bar: that segment alone. Click a track name: all its keys; Shift-click adds a track; Alt-click removes its keys (proposed, section 12). Marquee: Shift adds, Alt subtracts, layers stay selected (00 §4); over a collapsed layer's summary row (spec 09) it selects the keys of all that layer's tracks in the range. Click on empty timeline: clear keys, keep layers.
 
-**Select menu** (timeline panel menu and right-click). All keys on track (the right-clicked or inspector-focused track); All on layer (selected layers); All in composition; All in work area and At playhead (selected layers; all when none); Every Nth… (dialog: N default 2, Offset default 0, the zl_Scriptlets alternating default; counted per track from its earliest selected key); By ease type ▸ (Linear, Ease, Hold, Spring, Elastic, Bounce, Auto tangent: the segments and their keys); By label ▸ (spec 09); Invert. None reads scroll, zoom, collapse or shy state. The status bar shows "412 keys, 380 eases selected" after each command.
+**Select menu** (timeline panel menu and right-click). All keys on track (the right-clicked or inspector-focused track); All on layer (selected layers); All in composition; All in work area and At playhead (selected layers; all when none); Every Nth… (N default 2, Offset default 0, the zl_Scriptlets alternating default); By ease type ▸ (Linear, Ease, Hold, Spring, Elastic, Bounce, Auto tangent: the segments and their keys); By label ▸ (spec 09); Invert. None reads scroll, zoom, collapse or shy state. The status bar shows "412 keys, 380 eases selected" after each command.
 
 **Key Sets.** "Save selection as Key Set…" in the Select menu (name field, default "Key Set 3"). A Key Sets list in the timeline side panel (`VERIFY:` placement) shows each name with a badge, "12", or "9 of 12" in amber with hover text "3 keys were deleted. Click to select the 9 that remain." Click: replace; Shift-click: add. Per-set menu: Update to current selection, Forget missing keys, Rename, Delete. Sets save with the file; each change is an undo step.
 
@@ -78,7 +75,7 @@ The selection store (UI side) holds one `KeySelectionV1`, applies `moves` and `r
 
 **Reverse.** Keys ▸ Reverse Selected Keys (menu, no default shortcut); status "Reversed 7 keys on 2 tracks"; disabled when no track has two selected keys.
 
-**Keyboard and states.** J/K and Shift+J/K (spec 10); Delete removes the selected keys; Escape clears the key selection, not the layer selection; Tab moves focus into the inspector's first field of the selection (`VERIFY:` focus order); section 12 proposes Ctrl+Alt+A. Nothing selected: the inspector shows the value at the playhead, as today. Locked layers: keys select and show; edits skip them with the status "4 keys on locked layers skipped". A Key Set with no keys left shows "0 of 12" and a Delete hint.
+**Keyboard and states.** Delete removes the selected keys; Escape clears the key selection, not the layer selection; Tab moves focus into the inspector's first field of the selection (`VERIFY:` focus order); section 12 proposes Ctrl+Alt+A. Locked layers: keys select and show; edits skip them with the status "4 keys on locked layers skipped".
 
 ## 6. User flows
 
@@ -92,11 +89,9 @@ The selection store (UI side) holds one `KeySelectionV1`, applies `moves` and `r
 
 **Flow 5 (limit): a Key Set after deleting keys.** Start: 12 keys across four tracks saved as Key Set "Hit 1", badge "12". (1) Marquee three of them, Delete: the badge reads "9 of 12" in amber. (2) Click "Hit 1": the 9 remaining keys select; status "9 of 12 keys selected; 3 are missing". (3) Ctrl+Z: the three keys return and the badge reads "12" (the set never shrank). (4) Ctrl+Shift+Z, then the set's menu ▸ Forget missing keys: badge "9". End: 9 members; the prune is one undo step.
 
-**Flow 6 (limit): 5,000 keys, then a proportional scrub.** Start: 60 layers, 6,000 keys. (1) Select ▸ All in composition: 6,000 keys select within one frame. (2) Alt-marquee a region: the update lands in the next frame. (3) Click a Scale track with keys 50, 100, 150: field "Mixed", toggle on Proportional. (4) Scrub 20 px right: the field reads "×1.20", readout "50 → 60 … 150 → 180"; release: 60, 120, 180. End: ratio 1 : 2 : 3 kept; no update exceeded 16 ms (T12).
-
 ## 7. Evaluation and determinism
 
-Selection evaluates nothing. Every bulk edit and Reverse is a pure function `(document, selection) → document` producing ordinary keys, so `evaluate(document, time)` is unchanged in kind (Ruling 9). No driver, no bake. Reverse on a track with `auto` tangents re-derives slopes from the reversed neighbours at evaluation (Ruling 5); `free` segments carry their mirrored ease. Position tracks: Reverse reverses the keyed points, the spatial path is rebuilt through them with auto tangents, and a user-edited canvas tangent pair is swapped in for out at each key (Ruling 10).
+Selection evaluates nothing. Every bulk edit and Reverse is a pure function `(document, selection) → document` producing ordinary keys, so `evaluate(document, time)` is unchanged in kind (Ruling 9). No driver, no bake. Reverse on a track with `auto` tangents re-derives slopes from the reversed neighbours at evaluation (Ruling 5); `free` segments carry their mirrored ease. Position tracks: Reverse reverses the keyed points and the path is rebuilt through them (Ruling 10).
 
 ## 8. Edge cases and named limits
 
@@ -105,7 +100,6 @@ Selection evaluates nothing. Every bulk edit and Reverse is a pure function `(do
 - Proportional with every selected value 0 has no reference; the toggle falls back to Offset with hover text. Proportional on vec2 scales both channels about (0, 0), which is why Position defaults to Offset.
 - Off-grid values (bake, import) round to the grid on their first bulk edit, by at most half a unit. Named limit.
 - A hold between selected keys mirrors to a hold (spec 03). Mirrored spring, elastic and bounce eases: spec 03 decides; the involution test uses bezier and hold.
-- Reverse skips a track with one selected key. Every Nth keeps a track's first selected key when it has fewer than N.
 - Labels (spec 09) stay at their time under Reverse; values move. Spec 09 may overturn.
 
 ## 9. Interactions with other specs
@@ -113,7 +107,6 @@ Selection evaluates nothing. Every bulk edit and Reverse is a pure function `(do
 - 01, 03: `selectedSegmentsV1` is what Ctrl+Shift+E and Paste Ease act on; a bar click selects one segment without its keys.
 - 02, 08: a run (00 glossary) is derived from this selection per track; stagger and retime commands take the selection and return `moves`.
 - 04: the graph shows and edits the same ids; its transform box returns `EditResultV1`.
-- 05: baked tracks are ordinary keys; bulk edits never touch the retained driver parameters.
 - 07: drags, nudges and Snap return `moves`; the edge handles exist when two or more keys are selected.
 - 09: "By label"; the summary row's marquee rule; the same-frame highlight reads the selection.
 - 10: copy, paste and J/K scope read this selection; Paste returns `moves` for the pasted keys and selects them.
@@ -155,6 +148,6 @@ Each rule is a test in `key-selection.test.ts` or `bulk-edit.test.ts`.
 1. Proportional defaults to Offset for Position and Anchor Point (06-R4). Confirm, or make Proportional the default wherever values differ.
 2. Reverse keeps labels at their time (section 8). Confirm before spec 09.
 3. Values round to the property's grid on a bulk edit (06-R3). Confirm the grid, hundredths, or set it per property.
-4. **Proposed addition to 00 §4** (keyboard): "Ctrl+Alt+A: select every key on the selected layers, collapsed tracks included; all layers when none selected" (spec 06). The AE shortcut's visible-only meaning is deliberately replaced.
-5. **Proposed addition to 00 §4** (gesture): "Alt [Option]-click a track name: remove the track's keys from the selection" (spec 06), the complement of Shift-click and consistent with Alt-subtract in the marquee.
+4. **Proposed addition to 00 §4** (keyboard): "Ctrl+Alt+A: select every key on the selected layers, collapsed tracks included; all layers when none selected" (spec 06); AE's visible-only meaning is deliberately replaced.
+5. **Proposed addition to 00 §4** (gesture): "Alt [Option]-click a track name: remove the track's keys from the selection" (spec 06), the complement of Shift-click.
 6. **Proposed note for 00 §4 number fields:** with several keys selected a leading `-` is an offset, `=-5` forces an absolute negative, and `/2` joins `*2`.

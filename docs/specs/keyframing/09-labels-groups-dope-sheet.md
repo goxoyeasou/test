@@ -13,8 +13,8 @@ In scope: composition and per-layer summary rows; per-track span bars with overl
 ## 3. Rulings
 
 - **09-R1 (display data never evaluates):** labels, kinds, groups, guides, summary rows and span bars are read by views and selection commands only; `evaluateTrackV1` ignores them. Why: Blender's keyframe types "change only the colour", and animators trust them for it; Ruling 9. Cost if wrong: none.
-- **09-R2 (a summary diamond is a derived set of keys):** summary rows store nothing; a diamond is computed per draw from the tracks beneath it, and dragging or selecting it runs the ordinary multi-key move or select. Why: a stored summary is a second source of truth that drifts. Cost if wrong: nothing to migrate.
-- **09-R3 (groups reference keys by a stable id):** a key that joins a group receives an id (`readonly id?: string` on `KeyframeV1`, proposed in section 12). Moves, nudges, retimes, staggers and snaps keep the key and its id; Ruling 7 replacement removes the occupant with its id; copies (paste, Alt-drag) carry none. Why: the `${trackId}@${time}` reference of `KeySelectionV1` breaks on every drag; surviving "timing/value changes" is what users praised in Key Sets. Cost if wrong: an unread optional field, or every move command rewriting references.
+- **09-R2 (a summary diamond is a derived set of keys):** summary rows store nothing; a diamond is computed per draw from the tracks beneath it, and dragging or selecting it runs the ordinary multi-key move or select. Why: a stored summary is a second source of truth that drifts. Cost if wrong: nothing.
+- **09-R3 (groups reference keys by a stable id):** a key that joins a group receives an id (`readonly id?: string` on `KeyframeV1`, proposed in section 12). Moves, nudges, retimes, staggers and snaps keep the key and its id; Ruling 7 replacement removes the occupant with its id; copies (paste, Alt-drag) carry none. Why: the `${trackId}@${time}` reference of `KeySelectionV1` breaks on every drag; surviving "timing/value changes" is what users praised in Key Sets. Cost if wrong: an unread optional field.
 - **09-R4 (guides are document data):** guides belong to the composition, save with it, never export, and each guide edit is one undo step. Why: a guide placed to line up a hit must be there next session; Ruling 11 exempts only selection, pan and zoom. Cost if wrong: one flag.
 - **09-R5 (eight fixed labels, three kinds, hold derived):** eight named colours, no custom entries; kinds Key, Breakdown and Extreme; the hold glyph is drawn from the segment ease (Ruling 6), never stored. Why: labels sort passes (anticipation, hit, settle), not identities; eight fills one menu row and the digit keys with 0 left for "clear"; Blender's Jitter and Moving Hold mark baked keys, which spec 05 marks Breakdown; a stored hold kind could disagree with the ease. Cost if wrong: a palette constant and one enum value.
 
@@ -61,13 +61,13 @@ Commands, one undo step each (Ruling 11): `labelKeysV1` "Label 6 keys Red"; `set
 
 **Kinds.** Context menu "Kind ▸ Key, Breakdown, Extreme"; no shortcut. Glyphs: Key a diamond; Breakdown at 60 % size; Extreme at 120 % with a heavier outline; Hold a diamond with its right half squared, drawn whenever the segment starting at the key is a hold.
 
-**Groups.** Context menu "Group ▸ New group…" asks a name and swatch. A "Groups" row under the composition row shows each group as a tag over `groupSpanV1` in its colour; click selects its live keys in every view (Shift adds, Alt subtracts). Right-click: Rename, Colour ▸, Add or Remove selected keys, Label keys with group colour, Delete group (keys stay). A group with no live members draws in italic as "Settle (0 keys)", hover "All of this group's keys were deleted. Undo to restore them, or delete the group". Spec 02's Stagger popover and spec 07's edge-handle retime offer "Items: Groups" when `groupsOfSelectionV1` is non-empty.
+**Groups.** Context menu "Group ▸ New group…" asks a name and swatch. A "Groups" row under the composition row shows each group as a tag over `groupSpanV1` in its colour; click selects its live keys in every view (Shift adds, Alt subtracts). Right-click: Rename, Colour ▸, Add or Remove selected keys, Label keys with group colour, Delete group (keys stay). A group with no live members draws in italic as "Settle (0 keys)", hover "All of this group's keys were deleted. Undo to restore them". Spec 02's Stagger popover and spec 07's edge-handle retime offer "Items: Groups" when `groupsOfSelectionV1` is non-empty.
 
 **Same-frame highlight.** When the playhead equals a key time exactly, every diamond there draws a lit ring, the layer list shows a dot after each keyed layer, and the status bar reads "Frame 12: 4 tracks keyed". Alt+Down / Alt+Up (section 12) select the next / previous keyed track's key at the playhead, expanding and scrolling to it: "Frame 12: Scale (2 of 4)", or "No key at the playhead".
 
-**Guides.** Double-click the ruler to add a guide at that whole frame (section 12); Timeline menu "Add Guide…" takes a time (`12f`, `0.5s`) and a name. A guide is a vertical line through every row with a named ruler handle; drag the handle to move it (whole frames; Ctrl free; Shift snaps). Right-click: Rename, Lock, Delete, Go to guide. A locked guide shows a padlock and refuses drags and Delete with hover "Locked. Right-click to unlock". Shift+drag of keys, summary diamonds and the playhead snaps to guides. Adding at an occupied time selects the existing guide.
+**Guides.** Double-click the ruler to add a guide at that whole frame (section 12); Timeline menu "Add Guide…" takes a time (`12f`, `0.5s`) and a name. A guide is a vertical line through every row with a named ruler handle; drag the handle to move it (whole frames; Ctrl free; Shift snaps). Right-click: Rename, Lock, Delete, Go to guide. A locked guide shows a padlock and refuses drags and Delete with hover "Locked. Right-click to unlock". Shift+drag of keys, summary diamonds and the playhead snaps to guides. Adding at an occupied time selects that guide.
 
-Empty and error states: no keyed track, no diamonds and no bar; a filter matching nothing turns the chip to the warning colour with "No keys match"; an empty group name is refused with "Give the group a name".
+Empty and error states: no keyed track, no diamonds and no bar; a filter matching nothing shows "No keys match" on the chip; an empty group name is refused with "Give the group a name".
 
 ## 6. User flows
 
@@ -85,7 +85,7 @@ This spec evaluates nothing: every value stays `evaluate(document, time)` (Rulin
 ## 8. Edge cases and named limits
 
 - Two sub-frame keys 1/1000 frame apart are two diamonds; the row never merges times. Named limit.
-- A summary drag skips tracks on locked layers (`VERIFY:` lock model) and says so in the undo label.
+- A summary drag skips tracks on locked layers (`VERIFY:` lock model).
 - A group's colour never recolours its keys unless "Label keys with group colour" is run.
 - Paste and Alt-drag (spec 10) carry labels and kinds, never ids or membership. Ruling 7 replacement drops the occupant's id, so it leaves its groups.
 - Guides never export, two cannot share a time, and they stay put under spec 08's ripple retime.
