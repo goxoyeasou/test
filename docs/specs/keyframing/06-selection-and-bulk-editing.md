@@ -21,7 +21,7 @@ Non-goals: moving keys in time (spec 07), copy and paste (10), ease editing (01,
 - **06-R5 (Reverse is an order reversal, not a time reversal):** selected keys keep their times; per track the selected values reverse in order, and the selected segments' eases reverse in order and are mirrored by spec 03's `mirrorEaseV1`; unselected keys and half-selected segments are untouched. Why: report 2 §5 (the "won't fix" bug); keeping times lets a sparse selection reverse without touching anything between. Cost if wrong: nothing; it is a pure function of the selection.
 - **06-R6 (one field per value kind):** keys spanning several tracks get one inspector field per value kind and unit; Absolute is allowed only when the tracks are one property or share a range, otherwise Offset is forced on. Why: AE's "same layer property" rule is a data-model limit, not a UX choice (research note, KQ1 inferences). Cost if wrong: per-track rows added under the field.
 - **06-R7 (Key Sets live in the document and go stale, never shrink):** a deleted member counts as missing until the user prunes. Why: zl_Scriptlets' Key Sets exist because selections do not survive timing changes; dropping members silently would lose exactly the keys the user wanted back. Cost if wrong: one prune command.
-- **06-R8 (cost follows visible keys, not selected keys):** the selection is a `Set` of ids; the timeline draws only visible keys and asks `has` once per drawn key; an edit touches each selected track once. Why: report 2 §1, the August 2026 bug. Cost if wrong: T14 fails.
+- **06-R8 (cost follows visible keys, not selected keys):** the selection is a `Set` of ids; the timeline draws only visible keys and asks `has` once per drawn key; an edit touches each selected track once. Why: report 2 §1, the August 2026 bug. Cost if wrong: T12 fails.
 
 ## 4. Model and interfaces
 
@@ -70,7 +70,7 @@ The selection store (UI side) holds one `KeySelectionV1`, applies `moves` and `r
 
 **Selecting.** One highlight in the timeline, the graph (spec 04), the inspector's key badges and the canvas (selected Position keys are points on the motion path). Click a key: replace. Shift-click: toggle. Click a segment bar: that segment alone. Click a track name: all its keys; Shift-click adds a track; Alt-click removes its keys (proposed, section 12). Marquee: Shift adds, Alt subtracts, layers stay selected (00 §4); over a collapsed layer's summary row (spec 09) it selects the keys of all that layer's tracks in the range. Click on empty timeline: clear keys, keep layers.
 
-**Select menu** (timeline panel menu and right-click). All keys on track (the right-clicked or inspector-focused track); All on layer (selected layers); All in composition; All in work area and At playhead (selected layers; all when none); Every Nth… (dialog: N default 2, Offset default 0, the zl_Scriptlets alternating default; keeps every Nth of the current selection, counted per track from its earliest selected key); By ease type ▸ (Linear, Ease, Hold, Spring, Elastic, Bounce, Auto tangent: the segments and their keys); By label ▸ (spec 09); Invert. None reads scroll, zoom, collapse or shy state. The status bar shows "412 keys, 380 eases selected" after each command.
+**Select menu** (timeline panel menu and right-click). All keys on track (the right-clicked or inspector-focused track); All on layer (selected layers); All in composition; All in work area and At playhead (selected layers; all when none); Every Nth… (dialog: N default 2, Offset default 0, the zl_Scriptlets alternating default; counted per track from its earliest selected key); By ease type ▸ (Linear, Ease, Hold, Spring, Elastic, Bounce, Auto tangent: the segments and their keys); By label ▸ (spec 09); Invert. None reads scroll, zoom, collapse or shy state. The status bar shows "412 keys, 380 eases selected" after each command.
 
 **Key Sets.** "Save selection as Key Set…" in the Select menu (name field, default "Key Set 3"). A Key Sets list in the timeline side panel (`VERIFY:` placement) shows each name with a badge, "12", or "9 of 12" in amber with hover text "3 keys were deleted. Click to select the 9 that remain." Click: replace; Shift-click: add. Per-set menu: Update to current selection, Forget missing keys, Rename, Delete. Sets save with the file; each change is an undo step.
 
@@ -78,9 +78,7 @@ The selection store (UI side) holds one `KeySelectionV1`, applies `moves` and `r
 
 **Reverse.** Keys ▸ Reverse Selected Keys (menu, no default shortcut); status "Reversed 7 keys on 2 tracks"; disabled when no track has two selected keys.
 
-**Keyboard.** J/K and Shift+J/K (spec 10); Delete removes the selected keys; Escape clears the key selection, not the layer selection; Tab moves focus into the inspector's first field of the selection (`VERIFY:` focus order). Section 12 proposes Ctrl+Alt+A.
-
-**Empty and error states.** Nothing selected: the inspector shows the value at the playhead, as today. Locked layers: keys select and show; edits skip them with the status "4 keys on locked layers skipped". A Key Set with no keys left shows "0 of 12" and a Delete hint.
+**Keyboard and states.** J/K and Shift+J/K (spec 10); Delete removes the selected keys; Escape clears the key selection, not the layer selection; Tab moves focus into the inspector's first field of the selection (`VERIFY:` focus order); section 12 proposes Ctrl+Alt+A. Nothing selected: the inspector shows the value at the playhead, as today. Locked layers: keys select and show; edits skip them with the status "4 keys on locked layers skipped". A Key Set with no keys left shows "0 of 12" and a Delete hint.
 
 ## 6. User flows
 
@@ -90,11 +88,11 @@ The selection store (UI side) holds one `KeySelectionV1`, applies `moves` and `r
 
 **Flow 3 (multi-selection across tracks): set the first key of three fades to 0.** Start: three layers, each with Opacity 20 → 100. (1) Marquee frame 0 across the three Opacity rows: three keys select; the inspector shows "Opacity · 3 tracks · 3 keys", value 20, Absolute (values agree, one property). (2) Type 0, Enter: all three become 0. (3) Shift-marquee adds the three end keys: the field shows "Mixed"; Absolute still allowed. End: six keys selected, three at 0.
 
-**Flow 4 (undo): reverse a sparse selection.** Start: an Opacity track with keys at frames 0, 10, 20, 30, 40 valued 0, 100, 0, 100, 0, all selected. (1) Select ▸ Every Nth…, N 2, Offset 1, OK: the keys at 10 and 30 stay selected; status "2 keys selected". (2) Shift-click the key at frame 0: selected values 0, 100, 100 at frames 0, 10, 30. (3) Keys ▸ Reverse Selected Keys: values become 100, 100, 0 at the same frames; the keys at 20 and 40 are untouched; only the segment 0→10 (both ends selected and adjacent) has its ease mirrored. (4) Ctrl+Z: values return to 0, 100, 100; the same three keys are still selected (Ruling 11). End: the document as before step 3.
+**Flow 4 (undo): reverse a sparse selection.** Start: an Opacity track with keys at frames 0, 10, 20, 30, 40 valued 0, 100, 0, 100, 0, all selected. (1) Select ▸ Every Nth…, N 2, Offset 1, OK: the keys at 10 and 30 stay selected. (2) Shift-click the key at frame 0: selected values 0, 100, 100 at frames 0, 10, 30. (3) Keys ▸ Reverse Selected Keys: values become 100, 100, 0 at the same frames; the keys at 20 and 40 are untouched; only the segment 0→10 (both ends selected and adjacent) has its ease mirrored. (4) Ctrl+Z: values return to 0, 100, 100; the same three keys are still selected (Ruling 11). End: the document as before step 3.
 
 **Flow 5 (limit): a Key Set after deleting keys.** Start: 12 keys across four tracks saved as Key Set "Hit 1", badge "12". (1) Marquee three of them, Delete: the badge reads "9 of 12" in amber. (2) Click "Hit 1": the 9 remaining keys select; status "9 of 12 keys selected; 3 are missing". (3) Ctrl+Z: the three keys return and the badge reads "12" (the set never shrank). (4) Ctrl+Shift+Z, then the set's menu ▸ Forget missing keys: badge "9". End: 9 members; the prune is one undo step.
 
-**Flow 6 (limit): 5,000 keys, then a proportional scrub.** Start: 60 layers, 6,000 keys. (1) Select ▸ All in composition: 6,000 keys select within one frame. (2) Alt-marquee a region: the update lands in the next frame. (3) Click a Scale track with keys 50, 100, 150: field "Mixed", toggle on Proportional. (4) Scrub 20 px right: the field reads "×1.20", readout "50 → 60 … 150 → 180"; release: 60, 120, 180. End: ratio 1 : 2 : 3 kept; no update exceeded 16 ms (T14).
+**Flow 6 (limit): 5,000 keys, then a proportional scrub.** Start: 60 layers, 6,000 keys. (1) Select ▸ All in composition: 6,000 keys select within one frame. (2) Alt-marquee a region: the update lands in the next frame. (3) Click a Scale track with keys 50, 100, 150: field "Mixed", toggle on Proportional. (4) Scrub 20 px right: the field reads "×1.20", readout "50 → 60 … 150 → 180"; release: 60, 120, 180. End: ratio 1 : 2 : 3 kept; no update exceeded 16 ms (T12).
 
 ## 7. Evaluation and determinism
 
@@ -113,11 +111,10 @@ Selection evaluates nothing. Every bulk edit and Reverse is a pure function `(do
 ## 9. Interactions with other specs
 
 - 01, 03: `selectedSegmentsV1` is what Ctrl+Shift+E and Paste Ease act on; a bar click selects one segment without its keys.
-- 02: a run (00 glossary) is derived from this selection per track.
+- 02, 08: a run (00 glossary) is derived from this selection per track; stagger and retime commands take the selection and return `moves`.
 - 04: the graph shows and edits the same ids; its transform box returns `EditResultV1`.
 - 05: baked tracks are ordinary keys; bulk edits never touch the retained driver parameters.
 - 07: drags, nudges and Snap return `moves`; the edge handles exist when two or more keys are selected.
-- 08: retime commands take the selection and return `moves`.
 - 09: "By label"; the summary row's marquee rule; the same-frame highlight reads the selection.
 - 10: copy, paste and J/K scope read this selection; Paste returns `moves` for the pasted keys and selects them.
 
@@ -125,21 +122,19 @@ Selection evaluates nothing. Every bulk edit and Reverse is a pure function `(do
 
 Each rule is a test in `key-selection.test.ts` or `bulk-edit.test.ts`.
 
-- R1 scope beats view. T1 `select all on layer counts keys on collapsed tracks`: Opacity expanded (4 keys), Scale collapsed (6); `selectKeysV1({ kind: 'layer' })` gives 10 keys and 8 derived segments.
-- R2 All in composition ignores scroll and shy. T2: 60 layers, 6,000 keys, half shy, a scrolled view: 6,000.
-- R3 segments derive, bar clicks add alone. T3: select keys 0 and 10: `selectedSegmentsV1` has 1; bar-click 20→30: 2 segments, still 2 keys.
-- R4 typed absolute sets every key. T4 `typed absolute sets every selected key to the value`: 20, 40, 80, absolute 55: `[55, 55, 55]`, `Object.is` each.
-- R5 scrubbed offset preserves differences bit-exactly. T5: 20.3, 40.7, 80.1, offset +0.1 ten times then −0.1 ten times: after every step `toGridUnitsV1(v_i) − toGridUnitsV1(v_j)` equals the original integer for every pair; the final values `Object.is` the originals.
-- R6 proportional preserves ratios. T6 `proportional scrub preserves ratios`: 20, 40, 80 × 1.25 gives 25, 50, 100 (`Object.is`); 33.33, 66.66 × 1.1 gives each value within half a grid unit of the exact product.
-- R7 scale and `*` share a path. T7: `bulkEditV1(scale 2)` deep-equals the parse of `*2`; `/2` is factor 0.5.
-- R8 reverse is an involution. T8 `reverse of a sparse selection is an involution`: keys at 0, 10, 20, 30, 40 with distinct bezier and hold eases, selection {0, 10, 30}; reverse twice deep-equals the input; after one reverse every time is unchanged and the keys at 20 and 40 are untouched.
-- R9 reverse mirrors only selected segments. T9: as T8; after one reverse `keys[0].ease` equals `mirrorEaseV1` of the original and `keys[1].ease` equals its original (the segment 10→20 was half-selected).
-- R10 Key Sets survive unrelated undo. T10 `a Key Set survives undo of an unrelated edit`: save a set of 12; offset another track; undo: 12 present.
-- R11 Key Sets go stale, not smaller. T11: delete 3 members: 9 present, 3 missing, 12 members; undo: 12 present.
-- R12 selection follows keys. T12: move a selected key +5 frames through `EditResultV1.moves`: the selection holds the new id; undo: the old id.
-- R13 one field group per kind. T13: Opacity and Scale keys: one scalar group, `absoluteAllowed` false; Opacity on three layers: true; Opacity and Position: two groups.
-- R14 the 16 ms budget. T14 `5,000 selected keys stay under 16 ms`: a 6,000-key fixture; `selectKeysV1(composition)`, a marquee over half, `bulkEditV1(offset)` on 5,000 keys, each the median of 20 runs under 16 ms (one frame at 60 Hz; `VERIFY:` the CI runner's variance); `has` calls per timeline draw equal the visible key count, not the selected count.
-- R15 locked layers select but do not edit. T15: 4 of 10 selected keys on a locked layer; offset: 6 change, the report names 4 skipped.
+- R1 scope beats view. T1 `select all on layer counts keys on collapsed tracks`: Opacity expanded (4 keys), Scale collapsed (6); `selectKeysV1({ kind: 'layer' })` gives 10 keys and 8 derived segments; All in composition on 60 layers, 6,000 keys, half shy, a scrolled view: 6,000.
+- R2 segments derive, bar clicks add alone. T2: select keys 0 and 10: `selectedSegmentsV1` has 1; bar-click 20→30: 2 segments, still 2 keys.
+- R3 typed absolute sets every key. T3 `typed absolute sets every selected key to the value`: 20, 40, 80, absolute 55: `[55, 55, 55]`, `Object.is` each.
+- R4 scrubbed offset preserves differences bit-exactly. T4: 20.3, 40.7, 80.1, offset +0.1 ten times then −0.1 ten times: after every step `toGridUnitsV1(v_i) − toGridUnitsV1(v_j)` equals the original integer for every pair; the final values `Object.is` the originals.
+- R5 proportional preserves ratios; scale and `*` share a path. T5 `proportional scrub preserves ratios`: 20, 40, 80 × 1.25 gives 25, 50, 100 (`Object.is`); 33.33, 66.66 × 1.1 gives each value within half a grid unit of the exact product; `bulkEditV1(scale 2)` deep-equals the parse of `*2`.
+- R6 reverse is an involution. T6 `reverse of a sparse selection is an involution`: keys at 0, 10, 20, 30, 40 with distinct bezier and hold eases, selection {0, 10, 30}; reverse twice deep-equals the input; after one reverse every time is unchanged and the keys at 20 and 40 are untouched.
+- R7 reverse mirrors only selected segments. T7: as T6; after one reverse `keys[0].ease` equals `mirrorEaseV1` of the original and `keys[1].ease` equals its original (the segment 10→20 was half-selected).
+- R8 Key Sets survive unrelated undo. T8 `a Key Set survives undo of an unrelated edit`: save a set of 12; offset another track; undo: 12 present.
+- R9 Key Sets go stale, not smaller. T9: delete 3 members: 9 present, 3 missing, 12 members; undo: 12 present.
+- R10 selection follows keys. T10: move a selected key +5 frames through `EditResultV1.moves`: the selection holds the new id; undo: the old id.
+- R11 one field group per kind. T11: Opacity and Scale keys: one scalar group, `absoluteAllowed` false; Opacity on three layers: true; Opacity and Position: two groups.
+- R12 the 16 ms budget. T12 `5,000 selected keys stay under 16 ms`: a 6,000-key fixture; `selectKeysV1(composition)`, a marquee over half, `bulkEditV1(offset)` on 5,000 keys, each the median of 20 runs under 16 ms (one frame at 60 Hz; `VERIFY:` the CI runner's variance); `has` calls per timeline draw equal the visible key count, not the selected count.
+- R13 locked layers select but do not edit. T13: 4 of 10 selected keys on a locked layer; offset: 6 change, the report names 4 skipped.
 - D1 `play equals seek` on a fixture after `reverseSelectionV1` and after `bulkEditV1(offset)`: frames 0..N in order, then N alone from a fresh evaluator; `Object.is` per channel.
 - D2 `random order`: a shuffled frame list equals D1.
 - D3 `after an edit`: offset, undo, evaluate: equal to before the edit; the selection is unchanged.
@@ -152,8 +147,8 @@ Each rule is a test in `key-selection.test.ts` or `bulk-edit.test.ts`.
 3. The undo entry type: whether an entry can carry `moves` as metadata (00 §8.8).
 4. The inspector's number field: scrub gain, precision per property, range metadata, focus order (00 §8.5).
 5. The selection colour and the existing layer selection store.
-6. The CI runner's timing variance for T14.
-7. Whether the timeline rows are virtualised (R14 assumes only visible keys are drawn).
+6. The CI runner's timing variance for T12.
+7. Whether the timeline rows are virtualised (R12 assumes only visible keys are drawn).
 
 ## 12. Open questions for the user
 
